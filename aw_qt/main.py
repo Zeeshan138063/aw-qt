@@ -110,6 +110,10 @@ def main(
     manager = Manager(testing=testing)
     manager.autostart(_autostart_modules)
 
+    from .vpn_monitor import VpnMonitor
+    vpn_monitor = VpnMonitor(manager, testing=testing)
+    vpn_monitor.start()
+
     if not no_gui and not interactive_cli:
         from . import trayicon  # pylint: disable=import-outside-toplevel
 
@@ -132,6 +136,7 @@ def main(
 
         error_code = 0
 
+    vpn_monitor.stop()
     manager.stop_all()
     sys.exit(error_code)
 
