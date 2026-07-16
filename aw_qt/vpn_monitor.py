@@ -2,7 +2,7 @@ import logging
 import platform
 import subprocess
 import threading
-from typing import Optional
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -68,13 +68,20 @@ def is_vpn_connected() -> bool:
 class VpnMonitor:
     """Polls VPN status and starts/stops activity watchers accordingly."""
 
-    def __init__(self, manager, testing: bool, poll_interval: int = 30) -> None:
+    def __init__(
+        self,
+        manager,
+        testing: bool,
+        poll_interval: int = 30,
+        notify: Optional[Callable[[str, str], None]] = None,
+    ) -> None:
         self._manager = manager
         self._testing = testing
         self._poll_interval = poll_interval
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._last_state: Optional[bool] = None
+        self._notify = notify
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True, name="vpn-monitor")
@@ -103,6 +110,8 @@ class VpnMonitor:
     def _on_change(self, connected: bool) -> None:
         if connected:
             logger.info("VPN connected — starting activity watchers")
+            if self._notify:
+                self._notify("VPN Connected", "Tracking resumed — VPN is active.")
             for name in _WATCHER_MODULES:
                 alive = any(
                     m.name == name and m.is_alive() for m in self._manager.modules
@@ -111,6 +120,8 @@ class VpnMonitor:
                     self._manager.start(name)
         else:
             logger.info("VPN disconnected — stopping activity watchers")
+            if self._notify:
+                self._notify("VPN Disconnected", "Tracking paused — VPN is off.")
             for name in _WATCHER_MODULES:
                 alive = any(
                     m.name == name and m.is_alive() for m in self._manager.modules
