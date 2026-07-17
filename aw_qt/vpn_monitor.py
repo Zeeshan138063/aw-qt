@@ -2,7 +2,7 @@ import logging
 import platform
 import subprocess
 import threading
-from typing import Callable, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -65,23 +65,47 @@ def is_vpn_connected() -> bool:
         return False
 
 
+def _send_notification(title: str, msg: str) -> None:
+    """Send a native OS notification — safe to call from any thread."""
+    try:
+        system = platform.system()
+        if system == "Darwin":
+            subprocess.run(
+                ["osascript", "-e",
+                 f'display notification "{msg}" with title "{title}"'],
+                capture_output=True, timeout=5,
+            )
+        elif system == "Linux":
+            subprocess.run(
+                ["notify-send", title, msg],
+                capture_output=True, timeout=5,
+            )
+        else:  # Windows
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 f'[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime] | Out-Null;'
+                 f'$t = [Windows.UI.Notifications.ToastTemplateType]::ToastText02;'
+                 f'$x = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent($t);'
+                 f'$x.GetElementsByTagName("text")[0].AppendChild($x.CreateTextNode("{title}")) | Out-Null;'
+                 f'$x.GetElementsByTagName("text")[1].AppendChild($x.CreateTextNode("{msg}")) | Out-Null;'
+                 f'$n = [Windows.UI.Notifications.ToastNotification]::new($x);'
+                 f'[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("ActivityWatch").Show($n)'],
+                capture_output=True, timeout=10,
+            )
+    except Exception as e:
+        logger.debug(f"Notification failed: {e}")
+
+
 class VpnMonitor:
     """Polls VPN status and starts/stops activity watchers accordingly."""
 
-    def __init__(
-        self,
-        manager,
-        testing: bool,
-        poll_interval: int = 30,
-        notify: Optional[Callable[[str, str], None]] = None,
-    ) -> None:
+    def __init__(self, manager, testing: bool, poll_interval: int = 30) -> None:
         self._manager = manager
         self._testing = testing
         self._poll_interval = poll_interval
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._last_state: Optional[bool] = None
-        self._notify = notify
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True, name="vpn-monitor")
@@ -110,8 +134,7 @@ class VpnMonitor:
     def _on_change(self, connected: bool) -> None:
         if connected:
             logger.info("VPN connected — starting activity watchers")
-            if self._notify:
-                self._notify("VPN Connected", "Tracking resumed — VPN is active.")
+            _send_notification("VPN Connected", "Tracking resumed — VPN is active.")
             for name in _WATCHER_MODULES:
                 alive = any(
                     m.name == name and m.is_alive() for m in self._manager.modules
@@ -120,8 +143,7 @@ class VpnMonitor:
                     self._manager.start(name)
         else:
             logger.info("VPN disconnected — stopping activity watchers")
-            if self._notify:
-                self._notify("VPN Disconnected", "Tracking paused — VPN is off.")
+            _send_notification("VPN Disconnected", "Tracking paused — VPN is off.")
             for name in _WATCHER_MODULES:
                 alive = any(
                     m.name == name and m.is_alive() for m in self._manager.modules

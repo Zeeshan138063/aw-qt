@@ -266,7 +266,7 @@ def exit(manager: Manager) -> None:
     QApplication.quit()
 
 
-def run(manager: Manager, testing: bool = False, port: Optional[int] = None, vpn_monitor=None) -> Any:
+def run(manager: Manager, testing: bool = False, port: Optional[int] = None) -> Any:
     logger.info("Creating trayicon...")
     # print(QIcon.themeSearchPaths())
 
@@ -335,11 +335,6 @@ def run(manager: Manager, testing: bool = False, port: Optional[int] = None, vpn
 
     trayIcon = TrayIcon(manager, icon, widget, testing=testing, port=port)
     trayIcon.show()
-
-    if vpn_monitor is not None:
-        vpn_monitor._notify = lambda title, msg: trayIcon.showMessage(
-            title, msg, QSystemTrayIcon.MessageIcon.Information, 5000
-        )
 
     # Re-apply tooltip after show() to ensure it registers with the
     # platform's system tray backend.  On Windows 11 the tooltip can
