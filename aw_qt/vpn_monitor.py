@@ -8,6 +8,9 @@ logger = logging.getLogger(__name__)
 
 _WATCHER_MODULES = ["aw-watcher-window", "aw-watcher-afk"]
 
+# On Windows, prevent a console window from flashing on every subprocess poll.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 
 def is_vpn_connected() -> bool:
     """Return True if any VPN is actively connected."""
@@ -57,6 +60,7 @@ def is_vpn_connected() -> bool:
                     "| Select-Object -ExpandProperty InterfaceDescription",
                 ],
                 capture_output=True, text=True, timeout=5,
+                creationflags=_NO_WINDOW,
             )
             out = result.stdout.lower()
             return any(kw in out for kw in ("wireguard", "vpn", "tap-windows", "openvpn"))
@@ -91,6 +95,7 @@ def _send_notification(title: str, msg: str) -> None:
                  f'$n = [Windows.UI.Notifications.ToastNotification]::new($x);'
                  f'[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("ActivityWatch").Show($n)'],
                 capture_output=True, timeout=10,
+                creationflags=_NO_WINDOW,
             )
     except Exception as e:
         logger.debug(f"Notification failed: {e}")
